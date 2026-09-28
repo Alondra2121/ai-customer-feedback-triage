@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Customer Feedback Triage Assistant</title>
+  <style>
+    :root { --bg:#f5f7fb; --card:#ffffff; --text:#172033; --muted:#65718a; --line:#dfe5ef; --accent:#4f46e5; --soft:#eef2ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:980px; margin:0 auto; padding:48px 20px 72px; }
+    .hero { margin-bottom:28px; }
+    h1 { font-size:38px; line-height:1.08; margin:0 0 12px; letter-spacing:-0.03em; }
+    .sub { color:var(--muted); font-size:17px; max-width:760px; line-height:1.6; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:0 8px 30px rgba(23,32,51,.05); }
+    label { display:block; font-weight:700; margin-bottom:10px; }
+    textarea { width:100%; min-height:210px; resize:vertical; border:1px solid var(--line); border-radius:12px; padding:14px; font:inherit; line-height:1.5; color:var(--text); background:#fff; }
+    textarea:focus { outline:3px solid rgba(79,70,229,.12); border-color:var(--accent); }
+    button { margin-top:14px; appearance:none; border:0; background:var(--accent); color:white; padding:12px 16px; border-radius:10px; font-weight:700; cursor:pointer; }
+    button.secondary { background:#fff; color:var(--text); border:1px solid var(--line); margin-left:8px; }
+    .note { margin-top:12px; font-size:13px; color:var(--muted); line-height:1.5; }
+    .pill { display:inline-block; padding:6px 9px; border-radius:999px; background:var(--soft); color:#3730a3; font-size:12px; font-weight:700; margin:0 6px 6px 0; }
+    .result-row { padding:12px 0; border-bottom:1px solid var(--line); }
+    .result-row:last-child { border-bottom:0; }
+    .k { font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:800; margin-bottom:5px; }
+    .v { line-height:1.5; }
+    .empty { color:var(--muted); line-height:1.6; }
+    .full { grid-column:1/-1; }
+    .flow { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:12px; }
+    .step { border:1px solid var(--line); border-radius:12px; padding:14px; font-size:13px; line-height:1.45; background:#fff; }
+    .step strong { display:block; margin-bottom:5px; }
+    footer { margin-top:26px; color:var(--muted); font-size:13px; }
+    @media (max-width:760px) { .grid { grid-template-columns:1fr; } .flow { grid-template-columns:1fr; } h1 { font-size:31px; } }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <span class="pill">Customer Success</span><span class="pill">AI workflow</span><span class="pill">Human in the loop</span>
+      <h1>AI Customer Feedback Triage Assistant</h1>
+      <p class="sub">A lightweight prototype showing how an AI-assisted workflow could turn unstructured customer feedback into a category, urgency level, recommended next action, escalation flag, and draft response.</p>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <label for="msg">Customer message</label>
+        <textarea id="msg">We have been unable to export our reports since yesterday and our finance team is blocked. If this is not fixed today we may need to move the process elsewhere.</textarea>
+        <button id="run">Run workflow</button>
+        <button class="secondary" id="sample">Load another example</button>
+        <div class="note">Public demo note: this version uses transparent rule-based logic so no API key or customer data is sent anywhere. The documented prompt shows how I would connect the workflow to an LLM.</div>
+      </div>
+
+      <div class="card" id="output">
+        <div class="empty">Run the workflow to see the structured triage output.</div>
+      </div>
+
+      <div class="card full">
+        <div class="k">Workflow</div>
+        <div class="flow">
+          <div class="step"><strong>1. Capture</strong>Raw customer feedback enters the workflow.</div>
+          <div class="step"><strong>2. Classify</strong>Identify issue type, sentiment and urgency.</div>
+          <div class="step"><strong>3. Route</strong>Recommend the right owner and next action.</div>
+          <div class="step"><strong>4. Respond</strong>Draft a concise reply for human review.</div>
+          <div class="step"><strong>5. Learn</strong>Store structured fields for trend analysis.</div>
+        </div>
+      </div>
+    </section>
+
+    <footer>Built by Alondra Falcon as a learning project in AI-assisted Customer Success workflows and process automation.</footer>
+  </main>
+
+  <script>
+    const samples = [
+      "We love the product, but could you add a way to export dashboards directly to PowerPoint? Our leadership team asks for this every month.",
+      "I was charged twice this month and I need someone to check the invoice before our finance close on Friday.",
+      "Can you show me how to invite a new teammate and change their permissions?",
+      "This is the third time the integration has failed. Our team is frustrated and we are reviewing alternatives."
+    ];
+    let sampleIndex = 0;
+
+    function classify(text) {
+      const t = text.toLowerCase();
+      const churn = /(cancel|leave|switch|alternative|move .*elsewhere|reviewing alternatives|not renew)/.test(t);
+      const billing = /(invoice|charged|billing|payment|refund|credit card)/.test(t);
+      const bug = /(error|fail|failed|broken|unable|can't|cannot|not working|blocked)/.test(t);
+      const feature = /(feature|add a way|could you add|would love|request)/.test(t);
+      const howto = /(how do|how to|show me|where can i|invite|permissions)/.test(t);
+      const positive = /(love|great|excellent|happy|thank)/.test(t) && !bug && !billing;
+      const severe = /(blocked|urgent|today|third time|finance close|cannot|unable)/.test(t);
+      const negative = /(frustrated|failed|broken|unable|can't|cannot|charged twice|not working|blocked)/.test(t);
+
+      let category = "Other";
+      if (churn) category = "Churn Risk";
+      else if (billing) category = "Billing";
+      else if (bug) category = "Bug";
+      else if (feature) category = "Feature Request";
+      else if (howto) category = "How-To";
+      else if (positive) category = "Positive Feedback";
+
+      let urgency = churn || severe ? "High" : (bug || billing ? "Medium" : "Low");
+      let sentiment = negative || churn ? "Negative" : (positive ? "Positive" : "Neutral");
+      let owner = "Customer Success";
+      if (bug) owner = "Support + Customer Success";
+      else if (billing) owner = "Billing + Customer Success";
+      else if (feature) owner = "Product + Customer Success";
+      else if (howto) owner = "Customer Success";
+
+      let next = "Acknowledge the message, confirm the customer's goal, and decide the appropriate follow-up.";
+      if (churn) next = "Acknowledge the business impact, escalate immediately, confirm ownership, and agree an update cadence.";
+      else if (bug) next = "Confirm the impact and reproduction details, route to Support, and keep the customer updated.";
+      else if (billing) next = "Verify the billing details, route to the billing owner, and confirm when the customer can expect an update.";
+      else if (feature) next = "Clarify the underlying use case, log the request for Product, and set expectations without promising delivery.";
+      else if (howto) next = "Provide the relevant steps or resource and confirm whether the customer is unblocked.";
+      else if (positive) next = "Thank the customer and capture the feedback for the team.";
+
+      let response = "Thanks for sharing this. I’m looking into the best next step and will make sure the right team has the context. I’ll keep you updated as we progress.";
+      if (churn) response = "Thanks for flagging this — I understand the impact this is having on your team. I’m escalating it with the relevant team now and will stay accountable for keeping you updated on the next steps.";
+      else if (billing) response = "Thanks for flagging this. I’ll have the billing details reviewed and make sure the right team has the context. I’ll follow up with you once we have a confirmed update.";
+      else if (feature) response = "Thanks for the suggestion. I’d like to understand the use case a little better so we can capture it clearly for our Product team. I can’t promise a delivery timeline, but I can make sure the feedback is documented with the right context.";
+      else if (howto) response = "Absolutely — I can help with that. I’ll share the steps to get this set up, and we can confirm afterwards that everything is working as expected.";
+
+      const words = text.trim().split(/\s+/).slice(0,18).join(" ");
+      const summary = words + (text.trim().split(/\s+/).length > 18 ? "…" : "");
+      const impact = churn ? "Customer relationship and retention risk" : severe ? "Customer workflow is blocked or time-sensitive" : billing ? "Financial/admin impact" : feature ? "Potential workflow improvement" : howto ? "Adoption / usability need" : "General customer feedback";
+
+      return { summary, category, sentiment, urgency, impact, owner, next, escalate: churn || urgency === "High", response };
+    }
+
+    function render(r) {
+      const rows = [
+        ["Summary", r.summary],
+        ["Category", r.category],
+        ["Sentiment", r.sentiment],
+        ["Urgency", r.urgency],
+        ["Business impact", r.impact],
+        ["Suggested owner", r.owner],
+        ["Next action", r.next],
+        ["Escalate", r.escalate ? "Yes" : "No"],
+        ["Draft response", r.response]
+      ];
+      document.getElementById("output").innerHTML = rows.map(([k,v]) => `<div class="result-row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+    }
+
+    document.getElementById("run").addEventListener("click", () => {
+      const text = document.getElementById("msg").value.trim();
+      if (!text) return;
+      render(classify(text));
+    });
+
+    document.getElementById("sample").addEventListener("click", () => {
+      document.getElementById("msg").value = samples[sampleIndex % samples.length];
+      sampleIndex++;
+      document.getElementById("output").innerHTML = '<div class="empty">New example loaded. Click <strong>Run workflow</strong>.</div>';
+    });
+  </script>
+</body>
+</html>
